@@ -1,0 +1,11 @@
+{
+  "MACHINE_NAMES": {
+    "aa:bb:cc:55:66:77": "pi1",
+    "aa:bb:cc:55:66:78": "pi2",
+    "cc:bb:cc:55:66:78": "config_server",
+  },
+  "WIRELESS_CARDS": {
+    "dd:bb:cc:55:66:78": "wireless2",
+    "dd:bb:cc:55:66:79": "wireless1"
+  }
+}
