@@ -20,10 +20,10 @@ import json
 
 import logging
 
-from utils import config_liq, check_rtsp_port, sanitize_to_json
+from utils import config_liq, check_rtsp_port, sanitize_to_json, get_local_ip
 
 
-ip = "192.168.3.38"
+ip = get_local_ip()
 #ip = "192.168.1.114"
 
 CONFIG = {"client_keys": [
@@ -117,8 +117,8 @@ class Client(object):
         self.key = key
         self.name = name
         self.registered = False
-	self.port = port
-	self.connected = False
+        self.port = port
+        self.connected = False
 
         if isinstance(ws, GeventWebSocketClient):
             self.ip = ws.environ['REMOTE_ADDR']
@@ -134,7 +134,7 @@ class Client(object):
             if connected:
                 # logging.debug("stream is True")
                 self.stream = True
-		self.connected = True
+            self.connected = True
             logging.debug("[Register {}]".format(self.name))
             self.registered = True
             clients[self.key] = self
@@ -236,26 +236,26 @@ def socket_ws(ws):
             Client.remote_clients[client.name] = client
             logging.info("Registering client")
             client.register()
-	    if not(client.name.endswith("-local")):
-		    logging.info("client_name:{}\nClient.local_clients: {}:".format(
-                        client.name, Client.local_clients))
-		    if client.name not in Client.local_clients:
-			Client.local_clients[client.name] = Client.ports.pop()
-			logging.info("Starting new local client for {}".format(client.name))
-		    else:
-			Client.local_processes[client.name].terminate()
-            print("Return code do client: {}".format(Client.local_processes[client.name].returncode))
-			logging.info("killed old local client for {}. Starting a new one".format(client.name))
-		    logging.info("Launching local client for {}".format(client.name))
-		    cmd = "/home/stress/matriz/matriz/client.py -d -n {}-local -p {} -r {} -u {}".format(client.name, Client.local_clients[client.name], client.ip, "ws://{}:8080/config".format(ip)).split(" ")
-		    logging.info("COMMAND IS: {}".format(cmd))
-		    Client.local_processes[client.name] = subprocess.Popen(cmd)
-		    time.sleep(1)
-		    msg.update({"clients": [{"ip": ip, "name": "{}-local".format(client.name), "stream": client.stream, "port": Client.local_clients[client.name]}]})
-		    logging.info("Reply to remote client {}".format(json.dumps(msg)))
-		    client.ws.send(json.dumps(msg))
-	    else:
-		logging.info("Received connection from local client {}".format(client.name))
+        if not(client.name.endswith("-local")):
+            logging.info("client_name:{}\nClient.local_clients: {}:".format(
+                client.name, Client.local_clients))
+            if client.name not in Client.local_clients:
+                Client.local_clients[client.name] = Client.ports.pop()
+                logging.info("Starting new local client for {}".format(client.name))
+            else:
+                Client.local_processes[client.name].terminate()
+                print("Return code do client: {}".format(Client.local_processes[client.name].returncode))
+                logging.info("killed old local client for {}. Starting a new one".format(client.name))
+            logging.info("Launching local client for {}".format(client.name))
+            cmd = "/home/stress/matriz/matriz/client.py -d -n {}-local -p {} -r {} -u {}".format(client.name, Client.local_clients[client.name], client.ip, "ws://{}:8080/config".format(ip)).split(" ")
+            logging.info("COMMAND IS: {}".format(cmd))
+            Client.local_processes[client.name] = subprocess.Popen(cmd)
+            time.sleep(1)
+            msg.update({"clients": [{"ip": ip, "name": "{}-local".format(client.name), "stream": client.stream, "port": Client.local_clients[client.name]}]})
+            logging.info("Reply to remote client {}".format(json.dumps(msg)))
+            client.ws.send(json.dumps(msg))
+        else:
+            logging.info("Received connection from local client {}".format(client.name))
         #else:
         #    client = Client(ws=ws)
         #    client.register()
@@ -275,11 +275,11 @@ if __name__ == "__main__":
     #app.run(debug=True,
     #        http="0.0.0.0:8080",
     #        gevent=100)
-    
+
 #use_reloader=False,
     app.run(
         debug=False,
         http="0.0.0.0:8080",
         gevent=100
     )
-    
+

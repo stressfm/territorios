@@ -1,7 +1,7 @@
 import socket
 import json
 import logging
-
+import re
 from gevent import subprocess
 
 
@@ -56,3 +56,6 @@ def sanitize_to_json(s):
     """
     return json.loads(s.decode('string-escape').strip('"'))
 
+def get_local_ip():
+    out,err = subprocess.Popen(["ip","addr","show"],stdout=subprocess.PIPE).communicate()
+    return [ x for x in re.findall("\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", out.decode()) if not (x.startswith('127') or x.endswith('255'))][0]

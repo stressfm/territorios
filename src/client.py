@@ -18,9 +18,9 @@ import miniupnpc
 from time import strftime
 
 
-from gi.repository import GObject, Gst
 import gi
 gi.require_version('Gst', '1.0')
+from gi.repository import GObject, Gst
 
 
 from emitter import Emitter
@@ -69,19 +69,32 @@ def _create_parser():
                         '--debug',
                         action="store_true",
                         default=False)
+    parser.add_argument('-p',
+                        '--port',
+                        type=int,
+                        default=8554)
+    parser.add_argument('-n',
+                        '--name',
+                        type=str,
+                        default="matriz_client")
+    parser.add_argument('-u',
+                        '--url',
+                        type=str,
+                        default="ws://matriz.stress.fm/config")
+    parser.add_argument('-r',
+                        '--receive_from_ip',
+                        type=str,
+                        default="127.0.0.1")
+    parser.add_argument('-R',
+                        '--receive_from_port',
+                        type=int,
+                        default=8554)
     return parser
 
 
 def main(arguments=sys.argv[1:]):
     parser = _create_parser()
     args = parser.parse_args(arguments)
-    print(BANNER)
-    if not(os.path.exists(args.config_file)):
-        raise IOError("file {} does not exist!\n".format(args.config_file))
-    print("\n*******************" +
-          "  Program Started at: " +
-          strftime("%Y-%m-%d %H:%M:%S") +
-          "  ******************\n\n")
     if args.debug:
         logging.basicConfig(
             format=LOGGER_FORMAT,
@@ -93,16 +106,25 @@ def main(arguments=sys.argv[1:]):
             format=LOGGER_FORMAT,
             level=logging.INFO
         )
+    print(BANNER)
+    if not(os.path.exists(args.config_file)):
+        logging.info("file {} does not exist!\n".format(args.config_file))
+    else:
+        # Read config file
+        with open(args.config_file) as f:
+            config = json.load(f)
+            logging.debug(config)
+            CONFIG.update(config)
+    config = CONFIG
+    print("\n*******************" +
+          "  Program Started at: " +
+          strftime("%Y-%m-%d %H:%M:%S") +
+          "  ******************\n\n")
     logging.debug("Options:")
     for key, value in (vars(args)).items():
         logging.debug("{0}: {1}".format(key, value))
-    # Read config file
-    with open(args.config_file) as f:
-        config = json.load(f)
-        logging.debug(config)
-        CONFIG.update(config)
-        config = CONFIG
-        logging.debug(config)
+    config[key] = value
+    logging.debug(config)
     # Actually run the program
     matriz = Matriz(config)
     matriz()
@@ -136,7 +158,7 @@ class Matriz:
     def on_message(self, ws, message):
         try:
             message = json.loads(message)
-            logging.debug("Received message from server:")
+            logging.debug("{}: Received message from server:".format(self.name))
             logging.debug(message)
         except:
             logging.debug("[Error] Couldn't read message: %s" % (message, ))
@@ -151,6 +173,7 @@ class Matriz:
                 continue
             elif name != self.name:
                 logging.debug("Starting receiver for {}".format(name))
+                client["name"] = self.name
                 receiver = Receiver(**client)
                 receiver()
         # Check connected receivers and disconnect any that is not
@@ -183,22 +206,6 @@ class Matriz:
         # print first_message
         ws.send(first_message)
 
-        def run(*args):
-            while True:
-                a = raw_input("Waiting for commands...\n")
-                if a == "end":
-                    self.cleanup()
-                    break
-                elif a == "deregister":
-                    ws.send(json.dumps({"deregister": "deregister"}))
-                    break
-            time.sleep(1)
-            ws.close()
-            logging.debug("Thread terminating...")
-        # thread.start_new_thread(run, ())
-        t = threading.Thread(target=run, args=())
-        t.daemon = True
-        t.start()
 
     def cleanup(self):
         logging.info("Performing cleanup.")
@@ -243,7 +250,7 @@ class Matriz:
     def __call__(self):
         self.start_loop()
         # self.get_port()
-        self.emitter = Emitter(port=self.port, record=self.record)
+        self.emitter = Emitter(port=self.port, record=self.record, name=self.name)
         self.emitter()
         while not check_rtsp_port(port=self.port):
             time.sleep(0.1)
@@ -251,7 +258,7 @@ class Matriz:
         # self.jack_client()
         if self.receive_from_ip is not None and self.receive_from_port is not None:
             logging.debug("Starting receiver from config file: {}:{}".format(self.receive_from_ip, self.receive_from_port))
-            receiver = Receiver(**{"ip": self.receive_from_ip, "port": self.receive_from_port})
+            receiver = Receiver(**{"ip": self.receive_from_ip, "port": self.receive_from_port, "name": self.name})
             receiver()
         self.connect()
 

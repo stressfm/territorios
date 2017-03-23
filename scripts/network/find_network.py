@@ -86,7 +86,7 @@ def main(arguments=sys.argv[1:]):
 
     logging.debug("Had to pass {} times\n{}".format(tries, FOUND))
     logging.debug("had to hosts file >> ")
-    print_hosts(FOUND)
+    print_hosts(FOUND, MACHINE_NAMES)
 
 def get_network_address():
     cmd_iproute = "ip route"
@@ -114,7 +114,7 @@ def check_nmap():
         return check_nmap()
     return None
 
-def print_hosts(mydict):
+def print_hosts(mydict, MACHINE_NAMES):
     text_to_replace = "s/^[0-9].*\\b{0}\\b/{1} {0}/"
     for mac in mydict:
         logging.debug("replacing /etc/hosts lines... {} {}".format(mydict[mac], MACHINE_NAMES[mac]))
