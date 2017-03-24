@@ -1,0 +1,1 @@
+/usr/bin/jackd -ddummy -r44100 -p1024

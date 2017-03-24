@@ -35,8 +35,6 @@ BANNER = """
 *************************************************************
 """
 
-EMITTER_BIN = '../gst-src/emitter'
-RECEIVER_BIN = '../gst-src/receiver'
 SERVER_URL = "wss://matriz.stress.fm/config"
 
 CONFIG = {
@@ -54,7 +52,7 @@ CONFIG = {
     "receive_from_port": None,
 }
 
-LOGGER_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+LOGGER_FORMAT = '%(asctime)s - CLIENT - %(levelname)s - %(message)s'
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +104,7 @@ def main(arguments=sys.argv[1:]):
             format=LOGGER_FORMAT,
             level=logging.INFO
         )
-    print(BANNER)
+    logging.info(BANNER)
     if not(os.path.exists(args.config_file)):
         logging.info("file {} does not exist!\n".format(args.config_file))
     else:
@@ -116,22 +114,18 @@ def main(arguments=sys.argv[1:]):
             logging.debug(config)
             CONFIG.update(config)
     config = CONFIG
-    print("\n*******************" +
-          "  Program Started at: " +
-          strftime("%Y-%m-%d %H:%M:%S") +
-          "  ******************\n\n")
+    logging.info("\n{} Program Started at: {}\n\n".format(
+        "*"*20, strftime("%Y-%m-%d %H:%M:%S"), "*"*20))
     logging.debug("Options:")
     for key, value in (vars(args)).items():
         logging.debug("{0}: {1}".format(key, value))
-    config[key] = value
+        config[key] = value
     logging.debug(config)
     # Actually run the program
     matriz = Matriz(config)
     matriz()
-    print("\n********************" +
-          "  Program Ended at: " +
-          strftime("%Y-%m-%d %H:%M:%S") +
-          "  *******************\n\n")
+    logging.info("\n{} Program Ended at: {}\n\n".format(
+        "*"*20, strftime("%Y-%m-%d %H:%M:%S"), "*"*20))
 
 
 class Matriz:
@@ -252,10 +246,11 @@ class Matriz:
         # self.get_port()
         self.emitter = Emitter(port=self.port, record=self.record, name=self.name)
         self.emitter()
-        while not check_rtsp_port(port=self.port):
+        while not check_rtsp_port(port=self.port)[0]:
             time.sleep(0.1)
         # self.jack_client = JackClient()
         # self.jack_client()
+        logging.debug("ip: {}; port:{}".format(self.receive_from_ip, self.receive_from_port))
         if self.receive_from_ip is not None and self.receive_from_port is not None:
             logging.debug("Starting receiver from config file: {}:{}".format(self.receive_from_ip, self.receive_from_port))
             receiver = Receiver(**{"ip": self.receive_from_ip, "port": self.receive_from_port, "name": self.name})

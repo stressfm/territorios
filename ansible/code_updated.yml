@@ -1,0 +1,12 @@
+---
+- hosts: server
+
+  tasks:
+  - name: restart server
+    command: ./update_code.sh
+
+- hosts: client
+
+  tasks:
+  - name: restart client
+    command: ./update_code.sh

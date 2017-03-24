@@ -7,13 +7,14 @@ debconf-set-selections <<< "jackd2    jackd/tweak_rt_limits   boolean true"
 apt-get install -y jackd2 \
    moc libgstrtspserver-1.0 \
    python-gst-1.0 gstreamer1.0-plugins-bad libgstreamer-plugins-bad1.0 \
-   python-dev libffi-dev curl
+   python-dev libffi-dev libssl-dev curl
 
 curl -LO https://bootstrap.pypa.io/get-pip.py
 python get-pip.py
 pip install supervisor
 
 pip install -r /vagrant/requirements/server.txt
+pip install -r /vagrant/requirements/client.txt
 
 
 apt-get install -y rsync
@@ -24,3 +25,4 @@ sudo -u vagrant rsync -rv /vagrant/{scripts,src} /home/vagrant/territorios/
 # Copy files
 cp -r /vagrant/configs/provision/server.d/supervisord /etc/supervisord
 cp /vagrant/configs/provision/server.d/rc.local /etc/rc.local
+cp /vagrant/configs/provision/common.d/_.jackdrc /home/vagrant/.jackdrc

@@ -21,4 +21,5 @@ sudo -u vagrant rsync -rv /vagrant/{scripts,src} /home/vagrant/territorios/
 
 cp /vagrant/configs/provision/client.d/{rc.local,supervisord.conf} /etc
 cp /vagrant/configs/provision/client.d/client.json /home/vagrant/client.json
+cp /vagrant/configs/provision/common.d/_.jackdrc /home/vagrant/.jackdrc
 

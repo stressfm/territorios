@@ -33,21 +33,16 @@ def config_liq():
     # logging.debug("[stderr] '%s'" % err)
     return True
 
-def check_rtsp_port(address=None, port=8554):
+def check_rtsp_port(address="127.0.0.1", port=8554):
     """
     Checks if a given port is open and accepting coonections.
     """
     s = socket.socket()
-    s.settimeout(5.0)
-    connected = True
-    message = "Hello. How are you today?"
     try:
         s.connect((address, int(port)))
-        messsage = "Port %d at %s is open" % (int(port), address,)
     except socket.error as e:
-        conected = False
-        message = "%s" % e
-    return connected, message
+        return False, "{}".format(e)
+    return True, ""
 
 def sanitize_to_json(s):
     """
@@ -58,4 +53,5 @@ def sanitize_to_json(s):
 
 def get_local_ip():
     out,err = subprocess.Popen(["ip","addr","show"],stdout=subprocess.PIPE).communicate()
-    return [ x for x in re.findall("\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", out.decode()) if not (x.startswith('127') or x.endswith('255'))][0]
+    #return [ x for x in re.findall("\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", out.decode()) if not (x.startswith('127') or x.endswith('255'))][0]
+    return "172.28.128.3"

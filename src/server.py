@@ -12,7 +12,6 @@ TODO: Standardize response messages
 from flask import Flask
 from flask_uwsgi_websocket import GeventWebSocket, GeventWebSocketClient
 import socket
-#import subprocess
 from gevent import subprocess
 import time
 import os
@@ -23,9 +22,6 @@ import logging
 from utils import config_liq, check_rtsp_port, sanitize_to_json, get_local_ip
 
 
-ip = get_local_ip()
-#ip = "192.168.1.114"
-
 CONFIG = {"client_keys": [
                 {"name": "porto", "key": "key1"},
                 {"name": "montemor", "key": "key2"},
@@ -34,6 +30,7 @@ CONFIG = {"client_keys": [
             ],
             "monitor_key": {"name": "monitor", "key": "monitorkey"}
          }
+CLIENT_CMD = os.path.dirname(os.path.abspath(__file__)) + "/client.py"
 
 LOGGER_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 logger = logging.getLogger(__name__)
@@ -52,7 +49,7 @@ if os.path.exists(config_file):
     CONFIG.update(config)
     cfg.close()
 else:
-    print "No configuration file found"
+    logging.debug("No configuration file found")
 
 config = CONFIG
 
@@ -60,7 +57,7 @@ try:
     client_keys = [client["key"] for client in config['client_keys']]
     monitor_key = config['monitor_key']["key"]
 except:
-    print "Bad configuration file: %s" % (config_file)
+    logging.error("[QUIT] Bad configuration file: {}".format(config_file))
     exit(1)
 
 try:
@@ -69,7 +66,6 @@ except KeyError:
     pass
 
 clients = {}
-# webclients = []
 monitor = False
 clients_for_web = {
     "lisboa": False,
@@ -109,8 +105,6 @@ class Client(object):
     local_processes = {}
 
     def __init__(self, ws=None, name="matriz", stream=False, port=8554, key=None):
-        # logging.debug("Initiating client:")
-        # logging.debug(ws.environ['REMOTE_ADDR'])
         self.ws = ws
         self.stream = stream
         self.ip = None
@@ -125,7 +119,6 @@ class Client(object):
             self.ws_id = ws.id
 
     def register(self):
-        # logging.debug("Starting Register")
         restart_liquidsoap = False
         stream = False
         if self.key in client_keys:
@@ -148,11 +141,11 @@ class Client(object):
                 self.monitor(
                     {"status": "ok", "message": "No clients connected"})
             else:
-                self.monitor({"status": "ok",
-                              "message": "\n".join(["[%s] connected with IP %s" % (t["name"], t["ip"])
-                                                    for t in c[0]])})
+                self.monitor({
+                    "status": "ok",
+                    "message": "\n".join(["[{}] connected with IP {}".format(t["name"], t["ip"])
+                       for t in c[0]])})
         elif self.name == "webclient":
-            # self.registered = True
             self.webclients += [self]
             self.web = True
             cl = get_clients(web=True, rliq=restart_liquidsoap)
@@ -161,10 +154,8 @@ class Client(object):
 
         else:
             self.deregister()
-        # logging.debug("End Register")
 
     def deregister(self):
-        # TODO: Check if rtsp stream is up and broadcast to clients
         if self.name == "monitor":
             global monitor
             monitor = False
@@ -177,8 +168,6 @@ class Client(object):
             {"status": "ok", "message": "[%s] disconnected" %
                     (self.name), "clients": get_clients()})
         msg = "[%s] disconnected from config server" % self.name
-        #self.broadcast({"message": msg,
-        #                "clients": get_clients()})
         logging.info("[%s] disconnected" % (self.name))
         logging.info("clients: %s" % json.dumps(get_clients()))
 
@@ -193,7 +182,6 @@ class Client(object):
         monitor.ws.send(message)
 
     def broadcast(self, msg, web=True, rliq=False):
-        # logging.debug("Broadcast message [%s]: %s" % (type(msg), msg))
         msg.update({"name": self.name,
                     "clients": get_clients()})
         msgj = json.dumps(msg)
@@ -219,64 +207,47 @@ class Client(object):
 
 @websocket.route('/config')
 def socket_ws(ws):
-    logging.info("Connection started: {}".format(ws))
+    client_ip = ws.environ['REMOTE_ADDR']
+    host_ip = ws.environ["HTTP_HOST"].split(":")[0]
+    logging.debug("Connection started for ip: {}".format(client_ip))
     while ws.connected is True:
         response = ws.receive()
-        if response:
-            logging.info("Received message: {}".format(response))
         # Message comes escaped
         try:
             msg = sanitize_to_json(response)
-            logging.debug("Sanitized message: {}".format(msg))
+            #logging.debug("Sanitized message: {}".format(msg))
         except:
             msg = {}
+        if msg:
+            logging.debug("Message from {} is: {}".format(client_ip, msg))
         if "register" in msg and "name" in msg and "key" in msg and msg["name"]:
-            logging.info("Creating client")
             client = Client(ws=ws, name=msg["name"], key=msg["key"], port=msg["port"])
             Client.remote_clients[client.name] = client
-            logging.info("Registering client")
+            logging.debug("Registering client named '{}' with ip '{}'".format(client.name, client_ip))
             client.register()
-        if not(client.name.endswith("-local")):
-            logging.info("client_name:{}\nClient.local_clients: {}:".format(
-                client.name, Client.local_clients))
-            if client.name not in Client.local_clients:
-                Client.local_clients[client.name] = Client.ports.pop()
-                logging.info("Starting new local client for {}".format(client.name))
+            if not(client.name.endswith("-local")):
+                logging.debug("'{}' is not local; Client.local_clients: {}:".format(
+                    client.name, Client.local_clients))
+                if client.name not in Client.local_clients:
+                    Client.local_clients[client.name] = Client.ports.pop()
+                    logging.debug("Starting new local client for {}".format(client.name))
+                else:
+                    Client.local_processes[client.name].terminate()
+                    logging.info("killed old local client for {}. Starting a new one".format(client.name))
+                logging.info("Launching local client for {}".format(client.name))
+                cmd = "{} -d -n {}-local -p {} -r {} -u {}".format(CLIENT_CMD, client.name, Client.local_clients[client.name], client.ip, "ws://{}:8080/config".format("127.0.0.1")).split(" ")
+                logging.info("COMMAND IS: {}".format(cmd))
+                Client.local_processes[client.name] = subprocess.Popen(cmd)
+                time.sleep(1)
+                msg.update({"clients": [{"ip": host_ip, "name": "{}-local".format(client.name), "stream": client.stream, "port": Client.local_clients[client.name]}]})
+                logging.info("Reply to remote client {}: {}".format(client_ip, json.dumps(msg)))
+                client.ws.send(json.dumps(msg))
             else:
-                Client.local_processes[client.name].terminate()
-                print("Return code do client: {}".format(Client.local_processes[client.name].returncode))
-                logging.info("killed old local client for {}. Starting a new one".format(client.name))
-            logging.info("Launching local client for {}".format(client.name))
-            cmd = "/home/stress/matriz/matriz/client.py -d -n {}-local -p {} -r {} -u {}".format(client.name, Client.local_clients[client.name], client.ip, "ws://{}:8080/config".format(ip)).split(" ")
-            logging.info("COMMAND IS: {}".format(cmd))
-            Client.local_processes[client.name] = subprocess.Popen(cmd)
-            time.sleep(1)
-            msg.update({"clients": [{"ip": ip, "name": "{}-local".format(client.name), "stream": client.stream, "port": Client.local_clients[client.name]}]})
-            logging.info("Reply to remote client {}".format(json.dumps(msg)))
-            client.ws.send(json.dumps(msg))
-        else:
-            logging.info("Received connection from local client {}".format(client.name))
-        #else:
-        #    client = Client(ws=ws)
-        #    client.register()
+                logging.info("Received connection from local client {}".format(client.name))
 
-
-#def main():
-#    app.run(gevent=100)
 
 if __name__ == "__main__":
-#    app.run(debug=True,
-#            https="127.0.0.1:8080,fake_server.crt,fake_server.key,HIGH,!fake_ca.crt",
-#            master=True,
-#            processes=1,
-#            threads=1,
-#            gevent=100)
 
-    #app.run(debug=True,
-    #        http="0.0.0.0:8080",
-    #        gevent=100)
-
-#use_reloader=False,
     app.run(
         debug=False,
         http="0.0.0.0:8080",
