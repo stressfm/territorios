@@ -2,7 +2,7 @@
         "key": "key1",
         "name": "vagrantclient",
         "receive": true,
-        "url": "ws://vagrantserver:8080/config",
+        "url": "ws://172.28.128.3:8080/config",
         "interface": "eth0",
         "port": 8554
 }
