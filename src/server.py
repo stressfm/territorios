@@ -1,11 +1,22 @@
 #!/usr/bin/env python
 """
 TODO: Standardize response messages
-{
-    "clients": [{"stream": True|False, "name": "montemor|porto|lisboa|monitor",
-          "ip": "111.111.11.11", "port": 8554}],
-    "message": "some string",
-    "label": "some string"
+"server": {
+    "start": {
+       "receiver": {"ip": "111.111.111.1", "port":8554, "name": "name of emitter" },
+       "emitter": {"port": 8554},
+       "audiotest": {}
+    }
+    "stop": {
+       "emitter": {},
+       "receiver": {"name": "somename"},
+       "audiotest":{},
+    }
+    "status": {}
+}
+"client": {
+    "register": "",
+    "ports": [],
 }
 """
 
@@ -22,14 +33,16 @@ import logging
 from utils import config_liq, check_rtsp_port, sanitize_to_json, get_local_ip
 
 
-CONFIG = {"client_keys": [
-                {"name": "porto", "key": "key1"},
-                {"name": "montemor", "key": "key2"},
-                {"name": "lisboa", "key": "key3"},
-                {"name": "marte", "key": "key666"}
-            ],
-            "monitor_key": {"name": "monitor", "key": "monitorkey"}
-         }
+CONFIG = {
+    "client_keys": [
+        {"name": "porto", "key": "key1"},
+        {"name": "montemor", "key": "key2"},
+        {"name": "lisboa", "key": "key3"},
+        {"name": "marte", "key": "key666"}
+   ],
+   "monitor_key": {"name": "monitor", "key": "monitorkey"}
+}
+
 CLIENT_CMD = os.path.dirname(os.path.abspath(__file__)) + "/client.py"
 
 LOGGER_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -91,8 +104,14 @@ def get_clients(web=False, rliq=False, refresh=False):
                 cl_w[k] = False
         return cl_w
     else:
-        cl = [{"ip": clients[c].ip, "stream": clients[c].stream,
-               "name": clients[c].name, "port": clients[c].port} for c in client_keys if c in clients]
+        cl = [
+            {
+                "ip": clients[c].ip,
+                "stream": clients[c].stream,
+                "name": clients[c].name,
+                "port": clients[c].port
+            } for c in client_keys if c in clients
+        ]
     return c
 
 
@@ -108,6 +127,10 @@ class Client(object):
         self.ws = ws
         self.stream = stream
         self.ip = None
+        if ws.environ['HTTP_HOST'].split(":")[0] == "127.0.0.1":
+            self.local = True
+        else:
+            self.local = False
         self.key = key
         self.name = name
         self.registered = False
@@ -149,7 +172,7 @@ class Client(object):
             self.webclients += [self]
             self.web = True
             cl = get_clients(web=True, rliq=restart_liquidsoap)
-            logging.debug("For WEBCLIENT: %s" % (cl, ))
+            logging.debug("For WEBCLIENT: {}".format(cl))
             self.ws.send(json.dumps(cl))
 
         else:
@@ -162,28 +185,34 @@ class Client(object):
         elif self.registered:
             del clients[self.key]
             clients_for_web[self.name] = False
-            logging.debug("[%s] DeRegistered" % (self.name))
+            logging.debug("[{}] DeRegistered".format(self.name))
         self.ws.close()
-        self.monitor(
-            {"status": "ok", "message": "[%s] disconnected" %
-                    (self.name), "clients": get_clients()})
-        msg = "[%s] disconnected from config server" % self.name
-        logging.info("[%s] disconnected" % (self.name))
-        logging.info("clients: %s" % json.dumps(get_clients()))
+        self.monitor({
+            "status": "ok",
+            "message": "[{}] disconnected".format(self.name),
+            "clients": get_clients()
+        })
+        msg = "[{}] disconnected from config server".format(self.name)
+        logging.info("[{}] disconnected".format(self.name))
+        logging.info("clients: {}".format(json.dumps(get_clients())))
 
     def monitor(self, m):
         if not isinstance(monitor, Client):
             logging.debug("No monitor to send message")
             return False
-        info = "Connected clients: %d" % (len(clients) - 1)
-        message = json.dumps({"message": m["message"],
-                              "info": info,
-                              "clients": get_clients()})
+        info = "Connected clients: {}".format(len(clients) - 1)
+        message = json.dumps({
+            "message": m["message"],
+            "info": info,
+            "clients": get_clients()
+        })
         monitor.ws.send(message)
 
     def broadcast(self, msg, web=True, rliq=False):
-        msg.update({"name": self.name,
-                    "clients": get_clients()})
+        msg.update({
+            "name": self.name,
+            "clients": get_clients()
+        })
         msgj = json.dumps(msg)
         for c in client_keys:
             if c in clients and c != self.key:
@@ -196,8 +225,9 @@ class Client(object):
                 refresh = False
 
             webcl = json.dumps(
-                get_clients(web=True, rliq=rliq, refresh=refresh))
-            logging.debug("Web Message: %s" % (webcl,))
+                get_clients(web=True, rliq=rliq, refresh=refresh)
+            )
+            logging.debug("Web Message: {}".format(webcl))
             for wc in self.webclients:
                 wc.ws.send(webcl)
             return True
@@ -225,32 +255,44 @@ def socket_ws(ws):
             Client.remote_clients[client.name] = client
             logging.debug("Registering client named '{}' with ip '{}'".format(client.name, client_ip))
             client.register()
-            if not(client.name.endswith("-local")):
+            if not client.local:
                 logging.debug("'{}' is not local; Client.local_clients: {}:".format(
-                    client.name, Client.local_clients))
+                    client.name, Client.local_clients
+                ))
+
                 if client.name not in Client.local_clients:
                     Client.local_clients[client.name] = Client.ports.pop()
-                    logging.debug("Starting new local client for {}".format(client.name))
                 else:
                     Client.local_processes[client.name].terminate()
                     logging.info("killed old local client for {}. Starting a new one".format(client.name))
                 logging.info("Launching local client for {}".format(client.name))
-                cmd = "{} -d -n {}-local -p {} -r {} -u {}".format(CLIENT_CMD, client.name, Client.local_clients[client.name], client.ip, "ws://{}:8080/config".format("127.0.0.1")).split(" ")
+                cmd = "{} -d -L -n {} -p {} -r {} -R {} -u {}".format(CLIENT_CMD, client.name, Client.local_clients[client.name], client.ip, client.port, "ws://{}:8080/config".format("127.0.0.1")).split(" ")
                 logging.info("COMMAND IS: {}".format(cmd))
                 Client.local_processes[client.name] = subprocess.Popen(cmd)
-                time.sleep(1)
+                counter = 0
+                while not check_rtsp_port(address="127.0.0.1", port=Client.local_clients[client.name])[0]:
+                    counter += 1
+                    time.sleep(.5)
+                    if counter > 5:
+                        logging.debug("Could not connect to 127.0.0.1 at port {}, client '{}' might not connect to rtsp stream".format(Client.local_clients[client.name], client.name))
+                        break
+                logging.debug("Ticked {} times until stream up".format(counter))
+                # Deprecation: adding -local to use old matriz clients
                 msg.update({"clients": [{"ip": host_ip, "name": "{}-local".format(client.name), "stream": client.stream, "port": Client.local_clients[client.name]}]})
-                logging.info("Reply to remote client {}: {}".format(client_ip, json.dumps(msg)))
+                logging.info("Reply to remote client {}-local: {}".format(client_ip, json.dumps(msg)))
                 client.ws.send(json.dumps(msg))
             else:
                 logging.info("Received connection from local client {}".format(client.name))
-
+    Client.local_processes[client.name].terminate()
+    Client.ports += [Client.local_clients[client.name]]
 
 if __name__ == "__main__":
-
+    # This won't work with supervisor, spawns a shell and child processes will not be
+    # manageable by supervisor daemon
+    # Only to be used when testing
     app.run(
-        debug=False,
-        http="0.0.0.0:8080",
+        host="0.0.0.0",
+        port=8080,
+        master=True,
         gevent=100
     )
-

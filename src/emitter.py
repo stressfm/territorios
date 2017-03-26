@@ -37,18 +37,25 @@ class Emitter():
         self.ip = kwargs.get("ip", '0.0.0.0')
         self.port = str(kwargs.get("port", "8554"))
         self.mount = kwargs.get("mount", "stream")
+        self.local = kwargs.get("local", False)
         self.name = kwargs.get("name", "emitter")
         self.encoding_options = kwargs.get("encoding_options", "")
         self.record = kwargs.get("record", False)
+        if self.local:
+            jack_name = "{}-emitter".format(self.name)
+        else:
+            jack_name = self.name
         if self.record:
             logging.info("Recording ON")
-            self.pipeline = kwargs.get("pipeline", DEFAULT_PIPELINE).format(name=self.name,
-                                                                            encoding_options=self.encoding_options,
-                                                                            filename="-".join(time.asctime().split()))
+            self.pipeline = kwargs.get("pipeline", DEFAULT_PIPELINE).format(
+                name=jack_name,
+                encoding_options=self.encoding_options,
+                filename="-".join(time.asctime().split()))
         else:
             logging.info("NOT recording")
-            self.pipeline = kwargs.get("pipeline", TEST_PIPELINE).format(name=self.name,
-                                                                         encoding_options=self.encoding_options)
+            self.pipeline = kwargs.get("pipeline", TEST_PIPELINE).format(
+                name=jack_name,
+                encoding_options=self.encoding_options)
 
     def __call__(self):
         self.server = GstRtspServer.RTSPServer()

@@ -11,6 +11,7 @@ import logging
 import atexit
 import signal
 import threading
+import time
 
 import websocket
 import miniupnpc
@@ -38,6 +39,7 @@ BANNER = """
 SERVER_URL = "wss://matriz.stress.fm/config"
 
 CONFIG = {
+    "local": False,
     "python": True,
     "receive": True,
     "key": "key2",
@@ -67,26 +69,29 @@ def _create_parser():
                         '--debug',
                         action="store_true",
                         default=False)
+    parser.add_argument('-L',
+                        '--local',
+                        action="store_true",
+                        default=False)
+    parser.add_argument('-T',
+                        '--audio-test',
+                        action="store_true",
+                        default=False)
     parser.add_argument('-p',
                         '--port',
-                        type=int,
-                        default=8554)
+                        type=int)
     parser.add_argument('-n',
                         '--name',
-                        type=str,
-                        default="matriz_client")
+                        type=str)
     parser.add_argument('-u',
                         '--url',
-                        type=str,
-                        default="ws://matriz.stress.fm/config")
+                        type=str)
     parser.add_argument('-r',
                         '--receive_from_ip',
-                        type=str,
-                        default="127.0.0.1")
+                        type=str)
     parser.add_argument('-R',
                         '--receive_from_port',
-                        type=int,
-                        default=8554)
+                        type=int)
     return parser
 
 
@@ -105,24 +110,32 @@ def main(arguments=sys.argv[1:]):
             level=logging.INFO
         )
     logging.info(BANNER)
-    if not(os.path.exists(args.config_file)):
-        logging.info("file {} does not exist!\n".format(args.config_file))
-    else:
-        # Read config file
-        with open(args.config_file) as f:
-            config = json.load(f)
-            logging.debug(config)
-            CONFIG.update(config)
+    config_from_file = {}
+    if not args.local:
+        try:
+            # Read config file
+            with open("{}/{}".format(os.environ["HOME"],args.config_file)) as f:
+                config_from_file = json.load(f)
+                logging.debug(config_from_file)
+                CONFIG.update(config_from_file)
+        except:
+            logging.info("file {} does not exist!\n".format(args.config_file))
+
     config = CONFIG
+
+
     logging.info("\n{} Program Started at: {}\n\n".format(
         "*"*20, strftime("%Y-%m-%d %H:%M:%S"), "*"*20))
     logging.debug("Options:")
+
     for key, value in (vars(args)).items():
         logging.debug("{0}: {1}".format(key, value))
-        config[key] = value
+        if key not in config_from_file:
+            config[key] = value
     logging.debug(config)
+
     # Actually run the program
-    matriz = Matriz(config)
+    matriz = Matriz(config=config)
     matriz()
     logging.info("\n{} Program Ended at: {}\n\n".format(
         "*"*20, strftime("%Y-%m-%d %H:%M:%S"), "*"*20))
@@ -132,18 +145,21 @@ class Matriz:
 
     emitter = False
 
-    def __init__(self, config=None):
-        self.config_server_url = config["url"]
-        self.port = config["port"]
-        self.python = config["python"]
-        self.receive = config["receive"]
-        self.name = config["name"]
-        self.key = config["key"]
-        self.record = config["record"]
+    def __init__(self, config={}):
+        logging.debug("{}".format(config))
+        self.config_server_url = config.get("url", "ws://matriz.stress.fm/config")
+        self.local = config.get("local", False)
+        self.mode = config.get("mode", "centralized")
+        self.port = config.get("port", 8854)
+        self.python = config.get("python", True)
+        self.receive = config.get("receive", True)
+        self.name = config.get("name", "matriz_client")
+        self.key = config.get("key", "")
+        self.record = config.get("record", False)
         self.upnp_client = miniupnpc.UPnP()
         self.connection_attempts = 0
-        self.receive_from_ip = config["receive_from_ip"]
-        self.receive_from_port = config["receive_from_port"]
+        self.receive_from_ip = config.get("receive_from_ip", None)
+        self.receive_from_port = config.get("receive_from_port", None)
         atexit.register(self.cleanup)
         signal.signal(signal.SIGINT, self.cleanup)
         GObject.threads_init()
@@ -160,29 +176,34 @@ class Matriz:
         if not self.receive:
             return
         logging.debug("Running receivers: {}".format(Receiver.receivers))
-        for client in message["clients"]:
-            name = client["name"]
-            if name in Receiver.receivers:
-                logging.debug("Receiver for {} already running".format(name))
-                continue
-            elif name != self.name:
-                logging.debug("Starting receiver for {}".format(name))
+
+        if self.mode != "centralized":
+            # Check connected receivers and disconnect any that is not
+            # on the client list obtained from server
+            for client in message["clients"]:
+                name = client["name"]
+                if name in Receiver.receivers:
+                    logging.debug("Receiver for {} already running".format(name))
+                    continue
+                else:
+                    logging.debug("Starting receiver for {}\nwith client: {}".format(name, client))
+                    client["name"] = self.name
+                    receiver = Receiver(**client)
+                    receiver()
+        else:
+            if not Receiver.receivers.get(self.name, None):
+                logging.debug("Starting receiver from central server")
+                client = message["clients"][0]
                 client["name"] = self.name
                 receiver = Receiver(**client)
                 receiver()
-        # Check connected receivers and disconnect any that is not
-        # on the client list obtained from server
-        connected_client_names = [client["name"]
-                                  for client in message["clients"]
-                                  if client["name"] != self.name]
-        for client_name in Receiver.receivers.copy():
-            if client_name not in connected_client_names:
-                Receiver.receivers[client_name].stop()
-                logging.info("Receiver for {} disconnected".format(client_name))
-        if "message" in message:
-            logging.debug(message["message"])
-        else:
-            logging.debug(message)
+            else:
+                logging.debug("Receiver for server already started")
+
+        #if "message" in message:
+        #    logging.debug(message["message"])
+        #else:
+        #    logging.debug(message)
 
     def on_error(self, ws, error):
         logging.info("ON_ERROR %s" % error)
@@ -197,7 +218,6 @@ class Matriz:
             "key": self.key,
             "port": self.port,
         })
-        # print first_message
         ws.send(first_message)
 
 
@@ -244,18 +264,34 @@ class Matriz:
     def __call__(self):
         self.start_loop()
         # self.get_port()
-        self.emitter = Emitter(port=self.port, record=self.record, name=self.name)
+        self.emitter = Emitter(port=self.port, record=self.record, name=self.name, local=self.local)
         self.emitter()
         while not check_rtsp_port(port=self.port)[0]:
             time.sleep(0.1)
         # self.jack_client = JackClient()
         # self.jack_client()
         logging.debug("ip: {}; port:{}".format(self.receive_from_ip, self.receive_from_port))
-        if self.receive_from_ip is not None and self.receive_from_port is not None:
-            logging.debug("Starting receiver from config file: {}:{}".format(self.receive_from_ip, self.receive_from_port))
-            receiver = Receiver(**{"ip": self.receive_from_ip, "port": self.receive_from_port, "name": self.name})
-            receiver()
-        self.connect()
+        if self.local:
+            if self.receive_from_ip is not None and self.receive_from_port is not None:
+                counter = 0
+                while not check_rtsp_port(
+                        address=self.receive_from_ip,
+                        port=self.receive_from_port
+                        )[0]:
+                    time.sleep(1)
+                    counter += 1
+                    if counter >= 5:
+                        logging.error("Cannot connect to rtsp://{}:{}".format(
+                            self.receive_from_ip,
+                            self.receive_from_port))
+                        exit(1)
+                logging.debug("Starting receiver from config file: {}:{}".format(self.receive_from_ip, self.receive_from_port))
+                receiver = Receiver(**{"ip": self.receive_from_ip, "port": self.receive_from_port, "name": self.name, "local": self.local})
+                receiver()
+                while True:
+                    time.sleep(.1)
+        else:
+            self.connect()
 
     def connect(self):
         time.sleep(random.randrange(0, 2**self.connection_attempts))

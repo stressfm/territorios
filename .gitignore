@@ -2,3 +2,4 @@ ansible/hosts
 .vagrant
 __pycache__
 *.pyc
+cache
