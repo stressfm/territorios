@@ -228,6 +228,7 @@ class Matriz:
             Receiver.receivers[receiver].stop()
         if self.emitter is not None:
             logging.debug("Not shutting down emitter.")
+            self.emitter.stop()
 
     def get_port(self):
         logging.debug('Discovering... delay={}ums'.format(self.upnp_client.discoverdelay))
