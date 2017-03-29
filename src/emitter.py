@@ -29,6 +29,13 @@ DEFAULT_PIPELINE = (
     '! wavenc '
     '! filesink location="{filename}.wav"')
 
+ALSA_PIPELINE = (
+    'alsasrc '
+    '! audioconvert '
+    '! audioresample '
+    '! opusenc {encoding_options} '
+    '! rtpopuspay name=pay0 ')
+
 
 class Emitter():
     """ Audio emitter. """
@@ -41,11 +48,16 @@ class Emitter():
         self.name = kwargs.get("name", "emitter")
         self.encoding_options = kwargs.get("encoding_options", "")
         self.record = kwargs.get("record", False)
+        self.alsa = kwargs.get("alsa", False)
         if self.local:
             jack_name = "{}-emitter".format(self.name)
         else:
             jack_name = self.name
-        if self.record:
+        if self.alsa:
+            logging.debug("Recording OFF, ALSA ON")
+            self.pipeline = kwargs.get("pipeline", ALSA_PIPELINE).format(
+                encoding_options=self.encoding_options)
+        elif self.record:
             logging.info("Recording ON")
             self.pipeline = kwargs.get("pipeline", DEFAULT_PIPELINE).format(
                 name=jack_name,

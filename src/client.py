@@ -92,6 +92,10 @@ def _create_parser():
     parser.add_argument('-R',
                         '--receive_from_port',
                         type=int)
+    parser.add_argument('-A',
+                        '--alsa',
+                        action="store_true",
+                        default=False)
     return parser
 
 
@@ -147,6 +151,7 @@ class Matriz:
 
     def __init__(self, config={}):
         logging.debug("{}".format(config))
+        self.alsa = config["alsa"]
         self.config_server_url = config.get("url", "ws://matriz.stress.fm/config")
         self.local = config.get("local", False)
         self.mode = config.get("mode", "centralized")
@@ -188,6 +193,7 @@ class Matriz:
                 else:
                     logging.debug("Starting receiver for {}\nwith client: {}".format(name, client))
                     client["name"] = self.name
+                    client["alsa"] = self.alsa
                     receiver = Receiver(**client)
                     receiver()
         else:
@@ -195,6 +201,7 @@ class Matriz:
                 logging.debug("Starting receiver from central server")
                 client = message["clients"][0]
                 client["name"] = self.name
+                client["alsa"] = self.alsa
                 receiver = Receiver(**client)
                 receiver()
             else:
@@ -286,7 +293,7 @@ class Matriz:
                             self.receive_from_port))
                         exit(1)
                 logging.debug("Starting receiver from config file: {}:{}".format(self.receive_from_ip, self.receive_from_port))
-                receiver = Receiver(**{"ip": self.receive_from_ip, "port": self.receive_from_port, "name": self.name, "local": self.local})
+                receiver = Receiver(**{"ip": self.receive_from_ip, "port": self.receive_from_port, "name": self.name, "local": self.local, "alsa": self.alsa})
                 receiver()
                 while True:
                     time.sleep(.1)
