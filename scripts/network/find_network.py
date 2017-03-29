@@ -91,8 +91,10 @@ def main(arguments=sys.argv[1:]):
 def get_network_address():
     cmd_iproute = "ip route"
     out, err = Popen(cmd_iproute.split(" "), stdout=PIPE).communicate()
-    pattern = re.compile("\d{1,3}\.\d{1,3}\.\d{1,3}\.0\/\d{1,2}")
-    return pattern.findall(out.decode('utf-8'))[0]
+    gw_iface = re.findall("\d{1,3}\.\d{1,3}\.\d{1,3}", out.decode('utf-8').split("\n")[0])[0]
+    pattern_net = re.compile("\d{1,3}\.\d{1,3}\.\d{1,3}\.0\/\d{1,2}")
+    logging.debug([ x for x in pattern_net.findall(out.decode('utf-8')) if gw_iface in x][0])
+    return [ x for x in pattern_net.findall(out.decode('utf-8')) if gw_iface in x][0]
 
 def get_actual_server_ip():
     # get the server ip and set it in /home/pi/client.json
@@ -117,7 +119,7 @@ def check_nmap():
 def print_hosts(mydict, MACHINE_NAMES):
     text_to_replace = "s/^[0-9].*\\b{0}\\b/{1} {0}/"
     for mac in mydict:
-        logging.debug("replacing /etc/hosts lines... {} {}".format(mydict[mac], MACHINE_NAMES[mac]))
+        logging.info("replacing /etc/hosts lines... {} {}".format(mydict[mac], MACHINE_NAMES[mac]))
         #cmd = ["sudo", "sed", "-i.bak", text_to_replace.format(MACHINE_NAMES[mac], mydict[mac]), "/etc/hosts"]
         #Popen(cmd).wait()
 
