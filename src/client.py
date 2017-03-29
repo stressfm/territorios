@@ -271,7 +271,7 @@ class Matriz:
     def __call__(self):
         self.start_loop()
         # self.get_port()
-        self.emitter = Emitter(port=self.port, record=self.record, name=self.name, local=self.local)
+        self.emitter = Emitter(port=self.port, record=self.record, name=self.name, local=self.local, alsa=self.alsa)
         self.emitter()
         while not check_rtsp_port(port=self.port)[0]:
             time.sleep(0.1)
