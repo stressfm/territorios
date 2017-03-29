@@ -17,6 +17,13 @@ DEFAULT_PIPELINE = (
     '! audioresample'
     '! jackaudiosink client-name={name}')
 
+ALSA_PIPELINE = (
+    'rtspsrc location="rtsp://{ip}:{port}/{mount}" latency={latency} port-range="8556-8600" '
+    '! rtpopusdepay '
+    '! opusdec'
+    '! audioconvert'
+    '! audioresample'
+    '! alsasink')
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +35,7 @@ class Receiver():
 
     def __init__(self, *args, **kwargs):
         self.name = kwargs.get("name", "receiver")
+        self.alsa = kwargs.get("alsa", False)
         self.ip = kwargs.get("ip", "127.0.0.1")
         self.port = kwargs.get("port", 8554)
         self.local = kwargs.get("local", False)
@@ -37,12 +45,19 @@ class Receiver():
             jack_name = "{}-receiver".format(self.name)
         else:
             jack_name = self.name
-        self.pipeline = kwargs.get("pipeline", DEFAULT_PIPELINE).format(
-            ip=self.ip,
-            port=str(self.port),
-            mount=self.mount,
-            latency=str(self.latency),
-            name=jack_name)
+        if self.alsa:
+            self.pipeline = kwargs.get("pipeline", ALSA_PIPELINE).format(
+                ip=self.ip,
+                port=str(self.port),
+                mount=self.mount,
+                latency=str(self.latency))
+        else:
+            self.pipeline = kwargs.get("pipeline", DEFAULT_PIPELINE).format(
+                ip=self.ip,
+                port=str(self.port),
+                mount=self.mount,
+                latency=str(self.latency),
+                name=jack_name)
         logging.info("Running receiver for rtsp://{ip}:{port}/{mount}".format(
             ip=self.ip,
             port=self.port,
