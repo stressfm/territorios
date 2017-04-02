@@ -5,8 +5,26 @@
   - name: restart server
     command: ./update_code.sh
 
-- hosts: client
+  - name: halt
+    tags:
+      - halt
+    become: yes
+    command: halt
+
+- hosts: clients
 
   tasks:
   - name: restart client
     command: ./update_code.sh
+
+  - name: reboot
+    tags:
+      - reboot
+    become: yes
+    command: reboot
+
+  - name: halt
+    tags:
+      - halt
+    become: yes
+    command: halt

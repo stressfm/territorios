@@ -16,7 +16,8 @@ debconf-set-selections <<< "jackd2    jackd/tweak_rt_limits   boolean true"
 DEBIAN_FRONTEND=noninteractive apt-get install -y jackd2 \
    moc libgstrtspserver-1.0 \
    python-gst-1.0 gstreamer1.0-plugins-bad libgstreamer-plugins-bad1.0 \
-   python-dev libffi-dev libssl-dev curl
+   python-dev libffi-dev libssl-dev curl \
+   gstreamer1.0-alsa
 
 curl -LO https://bootstrap.pypa.io/get-pip.py
 python get-pip.py
