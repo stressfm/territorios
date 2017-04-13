@@ -1,3 +1,5 @@
 #!/bin/bash
 
-exec $(cat $HOME/.jackdrc)
+BASEDIR=$(dirname $0)
+
+exec $(cat $BASEDIR/.jackdrc)

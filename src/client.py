@@ -155,7 +155,7 @@ class Matriz:
         self.config_server_url = config.get("url", "ws://matriz.stress.fm/config")
         self.local = config.get("local", False)
         self.mode = config.get("mode", "centralized")
-        self.port = config.get("port", 8854)
+        self.port = config.get("port", 8554)
         self.python = config.get("python", True)
         self.receive = config.get("receive", True)
         self.name = config.get("name", "matriz_client")
