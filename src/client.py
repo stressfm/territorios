@@ -77,6 +77,7 @@ def _create_parser():
                         '--audio-test',
                         action="store_true",
                         default=False)
+    # Port to listen on for receiving stream
     parser.add_argument('-p',
                         '--port',
                         type=int)
@@ -86,6 +87,8 @@ def _create_parser():
     parser.add_argument('-u',
                         '--url',
                         type=str)
+    # Port and IP address to send stream to
+    # TODO: Change argument names
     parser.add_argument('-r',
                         '--receive_from_ip',
                         type=str)
@@ -94,6 +97,10 @@ def _create_parser():
                         type=int)
     parser.add_argument('-A',
                         '--alsa',
+                        action="store_true",
+                        default=False)
+    parser.add_argument('-t',
+                        '--temporary-test',
                         action="store_true",
                         default=False)
     return parser
@@ -147,7 +154,13 @@ def main(arguments=sys.argv[1:]):
 
 class Matriz:
 
-    emitter = False
+    # receivers:
+    # {name: {"port": ""}}
+    # emitters:
+    # {name: {"ip": "", "port": ""}}
+
+    emitters = {}
+    receivers = {}
 
     def __init__(self, config={}):
         logging.debug("{}".format(config))
@@ -156,6 +169,7 @@ class Matriz:
         self.local = config.get("local", False)
         self.mode = config.get("mode", "centralized")
         self.port = config.get("port", 8554)
+        self.ports = [x for x in range(self.port, self.port + 10, 2)]
         self.python = config.get("python", True)
         self.receive = config.get("receive", True)
         self.name = config.get("name", "matriz_client")
@@ -170,6 +184,19 @@ class Matriz:
         GObject.threads_init()
         Gst.init(None)
 
+    def start_receiver(self, src):
+        src["alsa"] = self.alsa
+        src["port"] = self.ports.pop(0)
+        receiver = Receiver(**src)
+        receiver()
+        self.receivers[src["name"]] = receiver
+
+    def start_emitter(self, dst):
+        dst["alsa"] = self.alsa
+        emitter = Emitter(**dst)
+        emitter()
+        self.emitters[dst["name"]] = emitter
+
     def on_message(self, ws, message):
         try:
             message = json.loads(message)
@@ -180,32 +207,31 @@ class Matriz:
             return
         if not self.receive:
             return
-        logging.debug("Running receivers: {}".format(Receiver.receivers))
+        logging.debug("Running receivers: {}".format(self.receivers))
 
         if self.mode != "centralized":
             # Check connected receivers and disconnect any that is not
             # on the client list obtained from server
             for client in message["clients"]:
                 name = client["name"]
-                if name in Receiver.receivers:
+                if name in self.receivers:
                     logging.debug("Receiver for {} already running".format(name))
                     continue
                 else:
-                    logging.debug("Starting receiver for {}\nwith client: {}".format(name, client))
-                    client["name"] = self.name
-                    client["alsa"] = self.alsa
-                    receiver = Receiver(**client)
-                    receiver()
+                    self.start_receiver(dict(client))
+                    self.start_emitter(dict(client))
         else:
-            if not Receiver.receivers.get(self.name, None):
-                logging.debug("Starting receiver from central server")
-                client = message["clients"][0]
-                client["name"] = self.name
-                client["alsa"] = self.alsa
-                receiver = Receiver(**client)
-                receiver()
+            logging.debug("Centralised mode")
+            client = message["clients"][0]
+            logging.debug("Connecting client {}".format(client))
+            if not self.receivers.get(self.name, None):
+                self.start_receiver(dict(client))
             else:
                 logging.debug("Receiver for server already started")
+            if not self.emitters.get(self.name, None):
+                self.start_emitter(dict(client))
+            else:
+                logging.debug("Emitter for server already started")
 
         #if "message" in message:
         #    logging.debug(message["message"])
@@ -230,11 +256,14 @@ class Matriz:
 
     def cleanup(self):
         logging.info("Performing cleanup.")
-        for receiver in Receiver.receivers.copy():
+        for receiver in self.receivers.copy():
             logging.debug("Shutting down receiver for {}.".format(receiver))
-            Receiver.receivers[receiver].stop()
-        if self.emitter is not None:
-            logging.debug("Not shutting down emitter.")
+            o = self.receivers.pop(receiver)
+            o.stop()
+        for emitter in self.emitters.copy():
+            o = self.emitters.pop(emitter)
+            o.stop()
+            logging.debug("Stopping emitter.")
 
     def get_port(self):
         logging.debug('Discovering... delay={}ums'.format(self.upnp_client.discoverdelay))
@@ -256,12 +285,13 @@ class Matriz:
                 break
             logging.debug("port {} is occupied. Trying port {}".format(self.port, self.port + 2))
             self.port += 2
-        self.upnp_client.addportmapping(self.port,
-                                        'TCP',
-                                        self.upnp_client.lanaddr,
-                                        self.port,
-                                        '{} - Matriz emitter'.format(self.name),
-                                        '')
+        self.upnp_client.addportmapping(
+            self.port,
+            'TCP',
+            self.upnp_client.lanaddr,
+            self.port,
+            '{} - Matriz emitter'.format(self.name),
+            '')
 
     def start_loop(self):
         self.loop = threading.Thread(target=GObject.MainLoop().run)
@@ -271,32 +301,44 @@ class Matriz:
     def __call__(self):
         self.start_loop()
         # self.get_port()
-        self.emitter = Emitter(port=self.port, record=self.record, name=self.name, local=self.local, alsa=self.alsa)
-        self.emitter()
-        while not check_rtsp_port(port=self.port)[0]:
-            time.sleep(0.1)
+        #self.emitter = Emitter(port=self.port, record=self.record, name=self.name, local=self.local, alsa=self.alsa)
+        #self.emitter()
+        #while not check_rtsp_port(port=self.port)[0]:
+        #    time.sleep(0.1)
         # self.jack_client = JackClient()
         # self.jack_client()
-        logging.debug("ip: {}; port:{}".format(self.receive_from_ip, self.receive_from_port))
+        #logging.debug("ip: {}; port:{}".format(self.receive_from_ip, self.receive_from_port))
         if self.local:
-            if self.receive_from_ip is not None and self.receive_from_port is not None:
-                counter = 0
-                while not check_rtsp_port(
-                        address=self.receive_from_ip,
-                        port=self.receive_from_port
-                        )[0]:
-                    time.sleep(1)
-                    counter += 1
-                    if counter >= 5:
-                        logging.error("Cannot connect to rtsp://{}:{}".format(
-                            self.receive_from_ip,
-                            self.receive_from_port))
-                        exit(1)
-                logging.debug("Starting receiver from config file: {}:{}".format(self.receive_from_ip, self.receive_from_port))
-                receiver = Receiver(**{"ip": self.receive_from_ip, "port": self.receive_from_port, "name": self.name, "local": self.local, "alsa": self.alsa})
-                receiver()
-                while True:
-                    time.sleep(.1)
+            #if self.receive_from_ip is not None and self.receive_from_port is not None:
+            #    counter = 0
+            #    while not check_rtsp_port(
+            #            address=self.receive_from_ip,
+            #            port=self.receive_from_port
+            #            )[0]:
+            #        time.sleep(1)
+            #        counter += 1
+            #        if counter >= 5:
+            #            logging.error("Cannot connect to rtsp://{}:{}".format(
+            #                self.receive_from_ip,
+            #                self.receive_from_port))
+            #            exit(1)
+            #    logging.debug("Starting receiver from config file: {}:{}".format(self.receive_from_ip, self.receive_from_port))
+            #    receiver = Receiver(**{"ip": self.receive_from_ip,"port": self.receive_from_port,"name": self.name, "local": self.local, "alsa": self.alsa})
+            #    receiver()
+            #    while True:
+            #        time.sleep(.1)
+            client = {
+                "name": self.name,
+                "port": self.receive_from_port,
+                "ip": self.receive_from_ip,
+                "local": self.local,
+                "alsa": self.alsa
+            }
+            self.start_emitter(client)
+            self.start_receiver(client)
+            while True:
+                time.sleep(.1)
+
         else:
             self.connect()
 
@@ -304,17 +346,21 @@ class Matriz:
         time.sleep(random.randrange(0, 2**self.connection_attempts))
         self.connection_attempts += 1
         # websocket.enableTrace(True)
-        ws = websocket.WebSocketApp(self.config_server_url,
-                                    on_message=self.on_message,
-                                    on_error=self.on_error,
-                                    on_close=self.on_close)
+        ws = websocket.WebSocketApp(
+            self.config_server_url,
+            on_message=self.on_message,
+            on_error=self.on_error,
+            on_close=self.on_close
+        )
         ws.on_open = self.on_open
         if self.config_server_url.startswith("wss://"):
-            ws.run_forever(sslopt={"cert_reqs": ssl.CERT_REQUIRED,
-                                   "ca_certs": ca_cert,
-                                   "ssl_version": ssl.PROTOCOL_TLSv1_2,
-                                   "keyfile": client_pem,
-                                   "certfile": client_crt})
+            ws.run_forever(
+                sslopt={"cert_reqs": ssl.CERT_REQUIRED,
+                     "ca_certs": ca_cert,
+                     "ssl_version": ssl.PROTOCOL_TLSv1_2,
+                     "keyfile": client_pem,
+                     "certfile": client_crt}
+            )
         else:
             ws.run_forever()
 

@@ -168,6 +168,7 @@ class Client(object):
                     "status": "ok",
                     "message": "\n".join(["[{}] connected with IP {}".format(t["name"], t["ip"])
                        for t in c[0]])})
+
         elif self.name == "webclient":
             self.webclients += [self]
             self.web = True
@@ -270,13 +271,14 @@ def socket_ws(ws):
                 logging.info("COMMAND IS: {}".format(cmd))
                 Client.local_processes[client.name] = subprocess.Popen(cmd)
                 counter = 0
-                while not check_rtsp_port(address="127.0.0.1", port=Client.local_clients[client.name])[0]:
-                    counter += 1
-                    time.sleep(.5)
-                    if counter > 5:
-                        logging.debug("Could not connect to 127.0.0.1 at port {}, client '{}' might not connect to rtsp stream".format(Client.local_clients[client.name], client.name))
-                        break
-                logging.debug("Ticked {} times until stream up".format(counter))
+                # Using udp
+                #while not check_rtsp_port(address="127.0.0.1", port=Client.local_clients[client.name])[0]:
+                #    counter += 1
+                #    time.sleep(.5)
+                #    if counter > 5:
+                #        logging.debug("Could not connect to 127.0.0.1 at port {}, client '{}' might not connect to rtsp stream".format(Client.local_clients[client.name], client.name))
+                #        break
+                #logging.debug("Ticked {} times until stream up".format(counter))
                 # Deprecation: adding -local to use old matriz clients
                 msg.update({"clients": [{"ip": host_ip, "name": "{}-local".format(client.name), "stream": client.stream, "port": Client.local_clients[client.name]}]})
                 logging.info("Reply to remote client {}-local: {}".format(client_ip, json.dumps(msg)))

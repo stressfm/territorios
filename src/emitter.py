@@ -39,53 +39,113 @@ ALSA_PIPELINE = (
 
 class Emitter():
     """ Audio emitter. """
+    emitters = {}
 
     def __init__(self, *args, **kwargs):
-        self.ip = kwargs.get("ip", '0.0.0.0')
-        self.port = str(kwargs.get("port", "8554"))
-        self.mount = kwargs.get("mount", "stream")
+        """
+        gst-launch-example:
+            GST_DEBUG="level:8" gst-launch-1.0 -m alsasrc device="hw:0" \
+                    ! level ! audioconvert ! audioresample !  opusenc \
+                    ! rtpopuspay ! udpsink host=127.0.0.1 port=9999 \
+                    2>&1 | grep "message:" | sed "s/.*\(message: .*\)/\1/"
+        TODO:
+            Add encoding options
+            Test src
+        """
+        self.ip = kwargs.get("ip", '127.0.0.1')
+        self.port = kwargs.get("port", 8554)
         self.local = kwargs.get("local", False)
-        self.name = kwargs.get("name", "emitter")
+        self.name = kwargs.get("name", "client")
         self.encoding_options = kwargs.get("encoding_options", "")
         self.record = kwargs.get("record", False)
         self.alsa = kwargs.get("alsa", False)
+
+
         if self.local:
-            jack_name = "{}-emitter".format(self.name)
+            jack_name = "{}-mic".format(self.name)
         else:
             jack_name = self.name
+
+        self.pipeline = Gst.Pipeline.new("my-mic")
+
         if self.alsa:
-            logging.debug("Recording OFF, ALSA ON")
-            self.pipeline = kwargs.get("pipeline", ALSA_PIPELINE).format(
-                encoding_options=self.encoding_options)
-        elif self.record:
-            logging.info("Recording ON")
-            self.pipeline = kwargs.get("pipeline", DEFAULT_PIPELINE).format(
-                name=jack_name,
-                encoding_options=self.encoding_options,
-                filename="-".join(time.asctime().split()))
+            logging.debug("ALSA ON")
+            src = Gst.ElementFactory.make('alsasrc')
+            src.set_property('device', "hw:0")
         else:
-            logging.info("NOT recording")
-            self.pipeline = kwargs.get("pipeline", TEST_PIPELINE).format(
-                name=jack_name,
-                encoding_options=self.encoding_options)
+            logging.debug("JACK ON")
+            src = Gst.ElementFactory.make('jackaudiosrc')
+            src.set_property('client-name', jack_name)
+
+        if self.record:
+            logging.debug("RECORDING ON - fake!")
+            queue = Gst.ElementFactory.make('queue')
+            tee = Gst.ElementFactory.make('tee')
+            tee.set_property('name', 'splitter')
+            wavenc = Gst.ElementFactory.make('wavenc')
+            filesink = Gst.ElementFactory.make('filesink')
+            filesink.set_property('location', "-".join(time.asctime().split()))
+
+
+        level = Gst.ElementFactory.make('level')
+        aconvert = Gst.ElementFactory.make('audioconvert')
+        aresample = Gst.ElementFactory.make('audioresample')
+        enc = Gst.ElementFactory.make('opusenc')
+        rtppay = Gst.ElementFactory.make('rtpopuspay')
+        sink = Gst.ElementFactory.make('udpsink')
+
+        sink.set_property('host', self.ip)
+        sink.set_property('port', self.port)
+        logging.info("-EMITTER- init emitter with ip: {} and port: {}".format(self.ip, self.port))
+
+
+        self.pipeline.add(src)
+        self.pipeline.add(level)
+        self.pipeline.add(aconvert)
+        self.pipeline.add(aresample)
+
+        #if self.record:
+        #    add queues tees filesink....
+
+        self.pipeline.add(enc)
+        self.pipeline.add(rtppay)
+        self.pipeline.add(sink)
+
+        src.link(level)
+        level.link(aconvert)
+        aconvert.link(aresample)
+        aresample.link(enc)
+        enc.link(rtppay)
+        rtppay.link(sink)
+
+        #if self.record:
+        #    link queues tees filesink....
+
+        if self.local == False:
+            self.bus = self.pipeline.get_bus()
+            self.bus.add_signal_watch()
+            self.bus.connect('message', self.on_message)
 
     def __call__(self):
-        self.server = GstRtspServer.RTSPServer()
-        self.server.set_service(self.port)
-        self.server.set_address(self.ip)
-        self.factory = GstRtspServer.RTSPMediaFactory()
-        self.factory.set_launch("( {} )".format(self.pipeline))
-        self.factory.set_shared(True)
-        self.factory.props.latency = 50
-        self.server.get_mount_points().add_factory("/{}".format(self.mount), self.factory)
-        self.server_id = self.server.attach(None)
-        if self.server_id == 0:
-            logging.debug("Return value: {}".format(self.server_id))
-            logging.debug("SNAFU. Exiting...")
-            sys.exit(-1)
-        logging.info("stream ready at rtsp://{}:{}/{}".format(self.server.get_address(),
-                                                              self.server.get_service(),
-                                                              self.mount))
+        logging.info("-EMITTER- Sending to {} at port {}".format(self.ip, self.port))
+        self.pipeline.set_state(Gst.State.PLAYING)
+
+    def on_message(self, bus, message):
+        s = Gst.Message.get_structure(message)
+
+        if message.type == Gst.MessageType.ELEMENT:
+            """
+            TODO:
+            Save to file or send to pd or send over websockets
+            """
+            if str(Gst.Structure.get_name(s)) == 'level':
+                rms = s.get_value('rms')
+                peak = s.get_value('peak')
+                decay = s.get_value('decay')
+                logging.info("-EMITTER- RMS: {}; PEAK: {}; DECAY: {}".format(rms, peak, decay))
+
+
+
 
 
 if __name__ == "__main__":
@@ -93,13 +153,14 @@ if __name__ == "__main__":
     GObject.threads_init()
     Gst.init(None)
     loop = GObject.MainLoop()
-    emitter = Emitter(record=True)
+    emitter = Emitter(record=True, alsa=True)
     emitter()
     try:
         logging.debug("Started main loop")
         loop.run()
     except KeyboardInterrupt:
         logging.debug("Caught keyboard interrupt")
+        emitter.pipeline.set_state(Gst.State.NULL)
         loop.quit()
         logging.debug("Mainloop Stopped")
 

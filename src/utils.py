@@ -33,13 +33,18 @@ def config_liq():
     # logging.debug("[stderr] '%s'" % err)
     return True
 
-def check_rtsp_port(address="127.0.0.1", port=8554):
+def check_rtsp_port(address="127.0.0.1", port=8554, udp=True):
     """
     Checks if a given port is open and accepting coonections.
     """
-    s = socket.socket()
+    if udp:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    else:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
     try:
         s.connect((address, int(port)))
+        s.shutdown(2)
     except socket.error as e:
         return False, "{}".format(e)
     return True, ""
