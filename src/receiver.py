@@ -70,7 +70,7 @@ class Receiver():
         if self.alsa:
             logging.debug("ALSA ON")
             sink = Gst.ElementFactory.make('alsasink')
-            sink.set_property('device', "hw:0")
+            #sink.set_property('device', "hw:0")
         else:
             logging.debug("JACK ON")
             sink = Gst.ElementFactory.make('jackaudiosink')

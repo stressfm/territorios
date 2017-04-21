@@ -71,7 +71,7 @@ class Emitter():
         if self.alsa:
             logging.debug("ALSA ON")
             src = Gst.ElementFactory.make('alsasrc')
-            src.set_property('device', "hw:0")
+            #src.set_property('device', "hw:0")
         else:
             logging.debug("JACK ON")
             src = Gst.ElementFactory.make('jackaudiosrc')
