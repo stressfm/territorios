@@ -8,6 +8,8 @@ gi.require_version('Gst', '1.0')
 gi.require_version('GstRtspServer', '1.0')
 from gi.repository import Gst, GObject, GstRtspServer
 
+import socket
+
 
 TEST_PIPELINE = (
     'jackaudiosrc client-name={name} '
@@ -59,6 +61,16 @@ class Emitter():
         self.encoding_options = kwargs.get("encoding_options", "")
         self.record = kwargs.get("record", False)
         self.alsa = kwargs.get("alsa", False)
+        self.pd_socket = None
+        if kwargs.get('pd', False):
+            # pd = "ip:port"
+            try:
+                pd_host, pd_port = kwargs.get('pd').split(':')
+                self.pd_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                self.pd_socket.settimeout(5.0)
+                self.pd_socket.connect((pd_host, pd_port))
+            except:
+                pass
 
 
         if self.local:
@@ -121,7 +133,7 @@ class Emitter():
         #if self.record:
         #    link queues tees filesink....
 
-        if self.local == False:
+        if self.local == False and self.pd_socket != None:
             self.bus = self.pipeline.get_bus()
             self.bus.add_signal_watch()
             self.bus.connect('message', self.on_message)
@@ -129,6 +141,14 @@ class Emitter():
     def __call__(self):
         logging.info("-EMITTER- Sending to {} at port {}".format(self.ip, self.port))
         self.pipeline.set_state(Gst.State.PLAYING)
+
+    def stop(self):
+        self.pipeline.set_state(Gst.State.NULL)
+        logging.info("Emitter for {} STOPPED".format(self.name))
+        if self.pd_socket:
+            self.pd_socket.close()
+        # self.loop.quit()
+
 
     def on_message(self, bus, message):
         s = Gst.Message.get_structure(message)
@@ -142,9 +162,8 @@ class Emitter():
                 rms = s.get_value('rms')
                 peak = s.get_value('peak')
                 decay = s.get_value('decay')
-                logging.info("-EMITTER- RMS: {}; PEAK: {}; DECAY: {}".format(rms, peak, decay))
-
-
+                #logging.info("-EMITTER- RMS: {}; PEAK: {}; DECAY: {}".format(rms, peak, decay))
+                self.pd_socket.sendall("{}{}".format(rms, ";\n"))
 
 
 

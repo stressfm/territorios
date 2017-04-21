@@ -50,6 +50,17 @@ class Receiver():
         self.port = kwargs.get("port", 8554)
         self.local = kwargs.get("local", False)
         self.latency = kwargs.get("latency", 0)
+        self.pd_socket = None
+        if kwargs.get('pd', False):
+            # pd = "ip:port"
+            try:
+                pd_host, pd_port = kwargs.get('pd').split(':')
+                self.pd_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                self.pd_socket.settimeout(5.0)
+                self.pd_socket.connect((pd_host, pd_port))
+            except:
+                pass
+
 
         if self.local:
             jack_name = "{}-pa".format(self.name)
@@ -103,7 +114,7 @@ class Receiver():
         #        exit(1)
 
 
-        if self.local == False:
+        if self.local == False and self.pd_socket != None:
             self.bus = self.pipeline.get_bus()
             self.bus.add_signal_watch()
             self.bus.connect("message", self.on_message)
@@ -128,7 +139,10 @@ class Receiver():
                 rms = s.get_value('rms')
                 peak = s.get_value('peak')
                 decay = s.get_value('decay')
-                logging.info("-RECEIVER- RMS: {}; PEAK: {}; DECAY: {}".format(rms, peak, decay))
+                #logging.info("-RECEIVER- RMS: {}; PEAK: {}; DECAY: {}".format(rms, peak, decay))
+                self.pd_socket.sendall("{}{}".format(rms, ";\n"))
+
+
 
 
     def stop(self):
