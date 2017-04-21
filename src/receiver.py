@@ -102,7 +102,6 @@ class Receiver():
         #        logging.debug("Could not connect to {} at port {}".format(self.ip, self.port))
         #        exit(1)
 
-        logging.info("Receiving at port {}".format(self.port))
 
         if self.local == False:
             self.bus = self.pipeline.get_bus()
@@ -112,6 +111,7 @@ class Receiver():
     def __call__(self):
         self.receivers[self.name] = self
         self.pipeline.set_state(Gst.State.PLAYING)
+        logging.info("-RECEIVER-Receiving at port {}".format(self.port))
 
 
     def on_message(self, bus, message):

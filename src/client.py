@@ -143,7 +143,7 @@ def main(arguments=sys.argv[1:]):
         logging.debug("{0}: {1}".format(key, value))
         if key not in config_from_file:
             config[key] = value
-    logging.debug(config)
+    #logging.debug(config)
 
     # Actually run the program
     matriz = Matriz(config=config)
@@ -163,7 +163,7 @@ class Matriz:
     receivers = {}
 
     def __init__(self, config={}):
-        logging.debug("{}".format(config))
+        #logging.debug("{}".format(config))
         self.alsa = config["alsa"]
         self.config_server_url = config.get("url", "ws://matriz.stress.fm/config")
         self.local = config.get("local", False)
@@ -212,6 +212,7 @@ class Matriz:
         if self.mode != "centralized":
             # Check connected receivers and disconnect any that is not
             # on the client list obtained from server
+            logging.debug("NOT Centralised mode")
             for client in message["clients"]:
                 name = client["name"]
                 if name in self.receivers:
@@ -334,6 +335,7 @@ class Matriz:
                 "local": self.local,
                 "alsa": self.alsa
             }
+            logging.debug("Local Mode")
             self.start_emitter(client)
             self.start_receiver(client)
             while True:
