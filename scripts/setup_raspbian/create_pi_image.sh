@@ -21,14 +21,19 @@ if [ ! -d "$CACHEDIR" ]; then
   mkdir "$CACHEDIR"
 fi
 
-wget -O ${CACHEDIR}/${RASPBIANFILE}.zip $RASPBIANURL
-unzip ${CACHEDIR}/${RASPBIANFILE}.zip
+if [ ! -e "$CACHEDIR"/${RASPBIANFILE}.zip ]; then
+  wget -O ${CACHEDIR}/${RASPBIANFILE}.zip $RASPBIANURL
+fi
 
-# Resize image and filesystem
 if [ ! -e ${CACHEDIR}/zero.img ]; then
   dd if=/dev/zero of=${CACHEDIR}/zero.img bs=1M count=1000
 fi
-cat ${CACHEDIR}/zero.img >> ${CACHEDIR}/${RASPBIANFILE}.img
+
+if [ ! -e "$CACHEDIR"/${RASPBIANFILE}.img ]; then
+  unzip -d ${CACHEDIR} ${CACHEDIR}/${RASPBIANFILE}.zip
+  # Resize image and filesystem
+  cat ${CACHEDIR}/zero.img >> ${CACHEDIR}/${RASPBIANFILE}.img
+fi
 
 NEWSIZE=$(sudo parted -m ${CACHEDIR}/${RASPBIANFILE}.img p | grep "${RASPBIANFILE}.img" | cut -d ':' -f2)
 sudo parted -s ${CACHEDIR}/${RASPBIANFILE}.img resizepart 2 $NEWSIZE

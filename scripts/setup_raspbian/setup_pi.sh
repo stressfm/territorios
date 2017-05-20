@@ -41,8 +41,18 @@ curl -LO https://bootstrap.pypa.io/get-pip.py
 python get-pip.py
 
 
-cd /home/pi
-sudo -u pi git clone https://github.com/stressfm/territorios.git
+GITREPO="/home/pi/territorios"
+if [ -d "$GITREPO" ]; then
+  cd "$GITREPO"
+  sudo -u git pull
+else
+  cd /home/pi
+  sudo -u pi git clone https://github.com/stressfm/territorios.git
+  cd "$GITREPO"
+  sudo -u pi git checkout no_rtspserver
+fi
+
+"${GITREPO}/configs/installer/client.sh
 
 #pip install -r /home/pi/matriz-client/requirements.txt
 #pip install supervisor
