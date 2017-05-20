@@ -81,7 +81,7 @@ class Receiver():
         if self.alsa:
             logging.debug("ALSA ON")
             sink = Gst.ElementFactory.make('alsasink')
-            #sink.set_property('device', "hw:0")
+            sink.set_property('device', "hw:0")
         else:
             logging.debug("JACK ON")
             sink = Gst.ElementFactory.make('jackaudiosink')
@@ -125,6 +125,49 @@ class Receiver():
         logging.info("-RECEIVER-Receiving at port {}".format(self.port))
 
 
+    def punch_udp_hole(self):
+        # Must establish connection to remote emitter first so to
+        # open port for receiving in the local router
+        # Emitter doesn't have to listen to connection but must set the source port
+        # port to the same of this connection
+        # https://tools.ietf.org/html/rfc5128#section-3.3
+
+        # TODO:
+        # It is possible that ports are not available
+        # We must check that receiver is getting data, and if not try another port
+        # Right now were using same dest and src ports (which cannot work if we use emitter
+        # and receiver)
+        # Maybe we need a negotiation logic:
+        # Open a udp socket at port, send connection information to config server
+        # wait for packet, retry until packet receive. close connection.
+        # Start receiver once we have connection
+
+        # Open hole
+        s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        # Set (bind) port to the one that will be used emitter (dest port)
+        s.bind(('', self.port))
+        # Use port that will be the source port (bind-port) of emitter
+        s.connect((self.ip, self.port))
+        # The string here is irrelevant, remote emitter will not get it
+        # It is just meant for router to establish the ip/port pair to forward
+        # connections to us
+        s.sendall(b'some random string')
+        s.close()
+
+        # Wait for helo to confirm hole opened
+        # bind to same port used to open the hole
+        s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        s.bind(('', self.port))
+        s.settimeout(5.0)
+        data, addr = s.recvfrom(1024)
+        s.close()
+        if not data:
+            self.port += 1
+            return None
+        if data == r'some random string':
+            return addr
+
+
     def on_message(self, bus, message):
         t = message.type
         if t == Gst.MessageType.EOS:
@@ -141,8 +184,6 @@ class Receiver():
                 decay = s.get_value('decay')
                 #logging.info("-RECEIVER- RMS: {}; PEAK: {}; DECAY: {}".format(rms, peak, decay))
                 self.pd_socket.sendall("{}{}".format(rms, ";\n"))
-
-
 
 
     def stop(self):

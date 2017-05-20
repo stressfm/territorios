@@ -83,7 +83,7 @@ class Emitter():
         if self.alsa:
             logging.debug("ALSA ON")
             src = Gst.ElementFactory.make('alsasrc')
-            #src.set_property('device', "hw:0")
+            src.set_property('device', "hw:0")
         else:
             logging.debug("JACK ON")
             src = Gst.ElementFactory.make('jackaudiosrc')
@@ -98,7 +98,6 @@ class Emitter():
             filesink = Gst.ElementFactory.make('filesink')
             filesink.set_property('location', "-".join(time.asctime().split()))
 
-
         level = Gst.ElementFactory.make('level')
         aconvert = Gst.ElementFactory.make('audioconvert')
         aresample = Gst.ElementFactory.make('audioresample')
@@ -108,8 +107,9 @@ class Emitter():
 
         sink.set_property('host', self.ip)
         sink.set_property('port', self.port)
-        logging.info("-EMITTER- init emitter with ip: {} and port: {}".format(self.ip, self.port))
 
+        sink.set_property('bind-port', 80)
+        logging.info("-EMITTER- init emitter with ip: {} and port: {}".format(self.ip, self.port))
 
         self.pipeline.add(src)
         self.pipeline.add(level)
@@ -141,6 +141,25 @@ class Emitter():
     def __call__(self):
         logging.info("-EMITTER- Sending to {} at port {}".format(self.ip, self.port))
         self.pipeline.set_state(Gst.State.PLAYING)
+
+
+    def check_udp_hole(self, ip, port):
+        # Port negotiation with receiver
+        # TODO:
+        # Receive client ip and port from config server
+        s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        sourceport = self.port
+        while True:
+            try:
+                s.bind(('', sourceport))
+                break
+            except:
+                sourceport += 1
+        s.connect((self.ip, self.port))
+        s.sendall(b'some random string')
+        s.close()
+        return sourceport
+
 
     def stop(self):
         self.pipeline.set_state(Gst.State.NULL)
