@@ -52,10 +52,10 @@ else
   sudo -u pi git checkout no_rtspserver
 fi
 
+pip install supervisor
 "${GITREPO}/configs/installer/client.sh
 
 #pip install -r /home/pi/matriz-client/requirements.txt
-#pip install supervisor
 #sed -i "$(wc -l /etc/rc.local | cut -d' ' -f1)i sudo -u pi supervisord -c /home/pi/.supervisord.conf" /etc/rc.local
 
 # Cleanup
