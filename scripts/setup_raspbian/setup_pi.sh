@@ -53,10 +53,11 @@ else
 fi
 
 pip install supervisor
-"${GITREPO}/configs/installer/client.sh
+"${GITREPO}/configs/installer/client.sh"
 
-#pip install -r /home/pi/matriz-client/requirements.txt
-#sed -i "$(wc -l /etc/rc.local | cut -d' ' -f1)i sudo -u pi supervisord -c /home/pi/.supervisord.conf" /etc/rc.local
+if [ ! -e /dpkgdivert ]; then
+  sudo -u pi supervisord
+fi
 
 # Cleanup
 apt-get --yes --force-yes autoremove
